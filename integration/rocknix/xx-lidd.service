@@ -1,0 +1,15 @@
+[Unit]
+Description=XX-CFW lid policy daemon (suspend con wake por tapa, transición a sueño profundo)
+After=systemd-logind.service
+ConditionPathExists=/dev/input
+
+[Service]
+Type=simple
+ExecStart=/storage/xx-cfw/xx-lidd -c /storage/.config/xx-lidd.conf
+Restart=on-failure
+RestartSec=2
+# Necesita escribir /sys/power/state y /sys/class/rtc/*/wakealarm
+User=root
+
+[Install]
+WantedBy=multi-user.target

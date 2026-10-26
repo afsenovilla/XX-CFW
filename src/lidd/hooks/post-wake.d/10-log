@@ -1,0 +1,3 @@
+#!/bin/sh
+logger -t xx-lidd "post-wake (motivo=$XX_LID_REASON)" 2>/dev/null || true
+exit 0

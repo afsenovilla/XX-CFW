@@ -1,0 +1,24 @@
+#!/bin/sh
+# Pide a RetroArch que guarde el estado antes de pasar a la fase profunda.
+# Requiere en retroarch.cfg:  network_cmd_enable = "true"  (puerto UDP 55355).
+# Si RetroArch no está corriendo, no hace nada.
+pidof retroarch >/dev/null 2>&1 || exit 0
+PORT=${RA_CMD_PORT:-55355}
+send() {
+	if command -v nc >/dev/null 2>&1; then
+		printf '%s' "$1" | nc -u -w1 127.0.0.1 "$PORT" >/dev/null 2>&1
+	elif command -v socat >/dev/null 2>&1; then
+		printf '%s' "$1" | socat - UDP-DATAGRAM:127.0.0.1:"$PORT" >/dev/null 2>&1
+	else
+		printf '%s' "$1" > /dev/udp/127.0.0.1/"$PORT" 2>/dev/null
+	fi
+}
+send SAVE_STATE
+# Dar tiempo a escribir el fichero (los estados de PS1/N64 pueden tardar).
+sleep 2
+sync
+# Marcador para que el arranque siguiente sepa que debe reanudar la última partida.
+mkdir -p /storage/.config/xx-cfw 2>/dev/null || mkdir -p /tmp/xx-cfw
+echo "$(date +%s) retroarch" > /storage/.config/xx-cfw/resume-pending 2>/dev/null \
+	|| echo "$(date +%s) retroarch" > /tmp/xx-cfw/resume-pending
+exit 0

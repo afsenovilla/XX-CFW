@@ -1,0 +1,5 @@
+#!/bin/sh
+# Ejemplo mínimo: deja constancia en el journal. Los hooks reales de ROCKNIX
+# (silenciar audio, LED, Wi-Fi) ya corren vía /usr/lib/systemd/system-sleep/.
+logger -t xx-lidd "pre-sleep (motivo=$XX_LID_REASON)" 2>/dev/null || true
+exit 0

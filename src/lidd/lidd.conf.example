@@ -1,0 +1,50 @@
+# /etc/xx-lidd.conf — política de tapa de XX-CFW
+# Duraciones en segundos, o con sufijo s/m/h.
+
+# Tiempo con la tapa cerrada durante el cual abrirla reanuda al instante.
+# Durante esta ventana la consola está en suspend-to-RAM con el sensor hall armado.
+# 0 = siempre (nunca pasa a la fase profunda).
+lid_wake_window = 90m
+
+# Qué hacer cuando vence la ventana y la tapa sigue cerrada:
+#   shutdown  ejecutar hooks deep-transition.d (guardar estado) y apagar      [defecto]
+#   sleep     ejecutar hooks y dormir sin wake por tapa (BSP: os_sleep=16).
+#             En ROCKNIX hoy equivale a seguir en el mismo suspend; tendrá sentido
+#             cuando exista la ruta profunda tipo stock en firmware abierto.
+#   none      no hacer nada: seguir dormida con wake por tapa hasta que se abra
+deep_action = shutdown
+
+# Hacer la transición profunda también con el cargador conectado (normalmente no:
+# enchufada no hay batería que proteger y así se puede usar como dock con tapa cerrada).
+deep_on_ac = no
+
+# La tapa debe permanecer cerrada este tiempo antes de dormir (filtra cierres a medias).
+debounce_ms = 700
+
+# Si la consola despierta con la tapa cerrada por algo que no es la tapa, el botón
+# POWER ni nuestra alarma (USB, batería…), espera esto por si el usuario abre, y
+# vuelve a dormir.
+other_wake_grace = 20s
+
+# Fallos consecutivos de suspend antes de rendirse y dejar la consola despierta.
+max_suspend_failures = 3
+
+# 0 = errores, 1 = avisos, 2 = info, 3 = depuración
+log_level = 2
+
+# ---- plataforma (todo se autodetecta; solo descomentar para forzar) ----
+# lid_device = /dev/input/event3            # evdev con SW_LID (kernel mainline)
+# power_device = /dev/input/event0          # evdev con KEY_POWER
+# hallkey_path = /sys/class/power_supply/axp2202-battery/hallkey   # kernel BSP
+# hallkey_closed_value = 1                  # verificar polaridad en la consola
+# hallkey_poll_ms = 500
+# os_sleep_path = /sys/class/power_supply/axp2202-battery/os_sleep # kernel BSP
+# os_sleep_on = 0                           # hall armado (wake por tapa)
+# os_sleep_off = 16                         # super standby (solo POWER despierta)
+# wakealarm_path = /sys/class/rtc/rtc0/wakealarm
+# sleep_state = mem
+# systemd_sleep_hooks = yes                 # ejecutar /usr/lib/systemd/system-sleep/* pre/post
+# suspend_cmd =                             # comando síncrono alternativo que vuelva tras el resume
+# shutdown_cmd = systemctl poweroff || poweroff
+# hooks_dir = /etc/xx-lidd/hooks
+# power_key_window_ms = 400
