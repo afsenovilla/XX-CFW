@@ -5,14 +5,21 @@ GBA SP o una DS: la consola duerme al instante, gasta lo mínimo posible, y al a
 sigue exactamente donde la dejaste en uno o dos segundos.
 
 Este repositorio **no reinventa un CFW completo**. Se construye como una capa sobre
-[ROCKNIX](https://rocknix.org) (kernel mainline, firmware abierto) y aporta las tres
-piezas que hoy faltan para esa experiencia:
+[ROCKNIX](https://rocknix.org) (kernel mainline, firmware abierto) con dos pilares:
+
+1. **Wake por tapa a ~1 %/h.** Suspensión real con el sensor hall armado, y una política
+   temporal que guarda la partida y apaga cuando la tapa lleva mucho cerrada.
+2. **Arranque rápido a la última partida.** Cuando la consola se ha apagado por la política
+   anterior, pulsar POWER debe llevar al juego sin pasar por el frontend.
+
+Aporta las piezas que hoy faltan para esa experiencia:
 
 | Capa | Qué aporta XX-CFW | Estado |
 |---|---|---|
 | Política de tapa (userspace) | `xx-lidd`: daemon que convierte el sensor hall en un flujo "cerrar → suspender con wake por tapa → tras N min guardar estado y bajar a sueño profundo / apagado" | Código escrito y probado en host; sin probar en consola |
 | Firmware (TF-A + stub SRAM) | Plan y puntos de intervención para reducir el consumo del sueño con wake por tapa (hoy ~2,5-3 %/h en ROCKNIX) hacia ~1 %/h | Documentado, sin implementar |
 | Diagnóstico | Scripts para medir en la consola real qué funciona y cuánto gasta cada modo | Escritos, sin ejecutar en consola |
+| Arranque rápido | Hook que registra el emulador en marcha y servicio que lo relanza antes del frontend | Experimental, sin probar |
 
 ## Por qué así (resumen de la investigación)
 
@@ -36,7 +43,9 @@ Lo que cuenta aquí está desarrollado con fuentes en `docs/01-estado-del-arte.m
 ## Estructura
 
 ```
-docs/                       diseño y plan (en español)
+docs/                       guion de la Fase 0, diseño y plan (en español)
+dist/                       xx-lidd precompilado para ARM64
+medidas/                    resultados de las sesiones en la consola
 src/lidd/                   daemon xx-lidd (C, sin dependencias) + tests de host
 tools/diag/                 scripts para ejecutar en la consola
 integration/rocknix/        paquete, unidad systemd, hooks de sleep y drop-in de logind
@@ -50,6 +59,10 @@ make -C src/lidd            # compila xx-lidd para el host
 make -C src/lidd test       # ejecuta los tests de la máquina de estados
 make -C src/lidd CROSS_COMPILE=aarch64-linux-gnu-   # binario para la consola
 ```
+
+## Primera tarde con la consola
+
+Sigue `docs/00-runbook-fase0.md`. Hay un binario ARM64 listo en `dist/`.
 
 ## Arranque rápido (en la consola, ROCKNIX)
 

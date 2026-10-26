@@ -1,0 +1,16 @@
+#!/bin/sh
+# Guarda la línea de comandos del emulador en marcha para relanzarlo en el próximo arranque.
+# Se ejecuta después de 10-retroarch-savestate. Formato del marcador: una línea con el epoch,
+# y el resto del fichero es el cmdline con argumentos separados por NUL.
+OUT=/storage/.config/xx-cfw/resume-cmd
+mkdir -p "$(dirname "$OUT")" 2>/dev/null || exit 0
+# Preferimos el lanzador de ROCKNIX (runemu.sh) porque reconstruye el entorno; si no, retroarch.
+for name in runemu.sh retroarch; do
+	pid=$(pidof -s "$name" 2>/dev/null) || pid=$(pgrep -o -f "$name" 2>/dev/null)
+	[ -n "$pid" ] && [ -r "/proc/$pid/cmdline" ] && {
+		{ date +%s; echo; cat "/proc/$pid/cmdline"; } > "$OUT"
+		exit 0
+	}
+done
+rm -f "$OUT"
+exit 0

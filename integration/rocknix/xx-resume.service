@@ -1,0 +1,16 @@
+[Unit]
+Description=XX-CFW: reanudar la última partida tras un apagado por tapa cerrada
+# Se ejecuta antes del frontend para no pagar su arranque. Verificar el nombre real del
+# servicio de EmulationStation en la build (emustation.service en ROCKNIX/JELOS).
+Before=emustation.service
+After=network-pre.target sound.target
+ConditionPathExists=/storage/.config/xx-cfw/resume-cmd
+
+[Service]
+Type=oneshot
+ExecStart=/storage/xx-cfw/xx-resume-last-game.sh
+StandardOutput=journal
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target

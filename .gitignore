@@ -1,4 +1,3 @@
 *.o
 src/lidd/xx-lidd
 src/lidd/tests/test_policy
-*.csv
