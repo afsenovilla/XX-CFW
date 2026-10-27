@@ -1,23 +1,28 @@
 #!/bin/sh
 # xx-sleep-drain.sh — mide el consumo en suspensión con ciclos despertados por RTC.
 #
-# Uso: sh xx-sleep-drain.sh [segundos_por_ciclo=3600] [ciclos=3] [estado=mem]
-#       opciones: --discard-first   no cuenta el primer ciclo
-#                 --os-sleep N      (BSP) escribir N en os_sleep antes de dormir
-#                 --csv fichero     ruta del CSV (defecto ./sleep-drain.csv)
-# Cierra la tapa (o no: la tapa no importa para la medida) y déjala. Al acabar imprime
-# %/h y mAh/h por ciclo y la media. Requiere un RTC con wakealarm escribible.
+# Uso: sh xx-sleep-drain.sh [segundos_por_ciclo=3600] [ciclos=3] [opciones]
+#   --raw              escribir en /sys/power/state en vez de `systemctl suspend`.
+#                      OJO: así NO se ejecutan los hooks de ROCKNIX (Wi-Fi, audio, núcleos),
+#                      y el consumo medido no es el real. Solo para comparar.
+#   --mem-sleep MODO   fijar /sys/power/mem_sleep (deep o s2idle) antes de medir
+#   --discard-first    no contar el primer ciclo
+#   --csv FICHERO      ruta del CSV (defecto ./sleep-drain.csv)
+#
+# La consola de ROCKNIX solo expone `capacity` en % enteros (sin charge_now), así que la
+# resolución es de 1 %. Por eso el resumen final usa el descenso TOTAL entre el principio y
+# el final: cuanto más largo el total, más fina la medida (8 h dan ±0,12 %/h).
 set -u
-SECS=3600; CYCLES=3; STATE=mem; DISCARD=0; OS_SLEEP=""; CSV=./sleep-drain.csv
+SECS=3600; CYCLES=3; RAW=0; DISCARD=0; MEMSLEEP=""; CSV=./sleep-drain.csv; N=0
 while [ $# -gt 0 ]; do
 	case "$1" in
+	--raw) RAW=1;;
+	--mem-sleep) MEMSLEEP=$2; shift;;
 	--discard-first) DISCARD=1;;
-	--os-sleep) OS_SLEEP=$2; shift;;
 	--csv) CSV=$2; shift;;
-	*) if [ -z "${A1:-}" ]; then A1=$1; elif [ -z "${A2:-}" ]; then A2=$1; else A3=$1; fi;;
+	*) N=$((N + 1)); [ $N -eq 1 ] && SECS=$1; [ $N -eq 2 ] && CYCLES=$1;;
 	esac; shift
 done
-SECS=${A1:-$SECS}; CYCLES=${A2:-$CYCLES}; STATE=${A3:-$STATE}
 
 BAT=""
 for p in /sys/class/power_supply/*; do
@@ -27,46 +32,42 @@ done
 RTC=""
 for r in /sys/class/rtc/rtc*; do [ -w $r/wakealarm ] && { RTC=$r; break; }; done
 [ -n "$RTC" ] || { echo "ningún RTC con wakealarm escribible"; exit 1; }
-FULL=$(cat $BAT/charge_full 2>/dev/null || cat $BAT/charge_full_design 2>/dev/null || echo 0)
+[ -n "$MEMSLEEP" ] && echo "$MEMSLEEP" > /sys/power/mem_sleep
+echo "batería=$BAT rtc=$RTC mem_sleep=$(cat /sys/power/mem_sleep) raw=$RAW ciclos=$CYCLES x ${SECS}s"
 
-read_bat() {
-	# imprime: charge_now(uAh) capacity(%) voltage_now(uV)
-	printf '%s %s %s' "$(cat $BAT/charge_now 2>/dev/null || echo 0)" \
-		"$(cat $BAT/capacity 2>/dev/null || echo 0)" "$(cat $BAT/voltage_now 2>/dev/null || echo 0)"
-}
+up() { cut -d' ' -f1 /proc/uptime | cut -d. -f1; }   # incluye el tiempo suspendido
+cap() { cat $BAT/capacity 2>/dev/null || echo 0; }
+volt() { cat $BAT/voltage_now 2>/dev/null || echo 0; }
 
-echo "batería=$BAT rtc=$RTC charge_full=${FULL}uAh estado=$STATE ciclos=$CYCLES x ${SECS}s"
-[ -n "$OS_SLEEP" ] && echo "$OS_SLEEP" > /sys/class/power_supply/axp2202-battery/os_sleep 2>/dev/null
-[ -e "$CSV" ] || echo "ciclo,inicio_epoch,duracion_s,charge_ini_uAh,charge_fin_uAh,cap_ini,cap_fin,v_ini_uV,v_fin_uV,pct_h,mAh_h,wake_count_delta" > "$CSV"
-
-sum_pct=0; n=0
-i=1
+[ -e "$CSV" ] || echo "ciclo,duracion_s,cap_ini,cap_fin,v_ini_uV,v_fin_uV,wakeups" > "$CSV"
+i=1; first_cap=""; first_up=""; last_cap=""; last_up=""
 while [ $i -le $CYCLES ]; do
-	set -- $(read_bat); c0=$1; p0=$2; v0=$3
-	w0=$(cat /sys/power/wakeup_count 2>/dev/null || echo 0)
-	t0=$(date +%s)
+	p0=$(cap); v0=$(volt); t0=$(up); w0=$(cat /sys/power/wakeup_count 2>/dev/null || echo 0)
 	echo 0 > $RTC/wakealarm
 	echo $(( $(cat $RTC/since_epoch) + SECS )) > $RTC/wakealarm || { echo "no pude armar la alarma"; exit 1; }
 	sync
-	echo "ciclo $i: durmiendo ${SECS}s (charge=$c0 cap=$p0 v=$v0)"
-	echo "$STATE" > /sys/power/state || { echo "suspend falló (rc=$?)"; exit 1; }
-	t1=$(date +%s); dur=$((t1 - t0))
-	set -- $(read_bat); c1=$1; p1=$2; v1=$3
-	w1=$(cat /sys/power/wakeup_count 2>/dev/null || echo 0)
-	if [ "$c0" -gt 0 ] && [ "$FULL" -gt 0 ]; then
-		pct_h=$(awk -v a=$c0 -v b=$c1 -v f=$FULL -v d=$dur 'BEGIN{printf "%.2f", (a-b)/f*100*3600/d}')
-		mah_h=$(awk -v a=$c0 -v b=$c1 -v d=$dur 'BEGIN{printf "%.1f", (a-b)/1000*3600/d}')
+	echo "ciclo $i: durmiendo ${SECS}s (capacidad=$p0% v=$v0)"
+	if [ $RAW -eq 1 ]; then
+		echo mem > /sys/power/state || { echo "suspend falló"; exit 1; }
 	else
-		pct_h=$(awk -v a=$p0 -v b=$p1 -v d=$dur 'BEGIN{printf "%.2f", (a-b)*3600/d}')
-		mah_h="n/a"
+		systemctl suspend || { echo "systemctl suspend falló"; exit 1; }
 	fi
-	echo "ciclo $i: ${dur}s reales, ${pct_h} %/h, ${mah_h} mAh/h (wakeups +$((w1 - w0)))"
-	echo "$i,$t0,$dur,$c0,$c1,$p0,$p1,$v0,$v1,$pct_h,$mah_h,$((w1 - w0))" >> "$CSV"
+	sleep 5
+	t1=$(up); dur=$((t1 - t0)); p1=$(cap); v1=$(volt)
+	w1=$(cat /sys/power/wakeup_count 2>/dev/null || echo 0)
+	echo "ciclo $i: ${dur}s reales, capacidad $p0% -> $p1%, wakeups +$((w1 - w0))"
+	echo "$i,$dur,$p0,$p1,$v0,$v1,$((w1 - w0))" >> "$CSV"
+	[ "$dur" -lt $((SECS * 8 / 10)) ] && echo "  aviso: despertó antes de tiempo; hubo otra fuente de wake"
 	if [ $i -gt 1 ] || [ $DISCARD -eq 0 ]; then
-		sum_pct=$(awk -v s=$sum_pct -v x=$pct_h 'BEGIN{print s+x}'); n=$((n + 1))
+		[ -z "$first_cap" ] && { first_cap=$p0; first_up=$t0; }
+		last_cap=$p1; last_up=$t1
 	fi
-	[ "$dur" -lt $((SECS / 2)) ] && echo "  aviso: despertó antes de tiempo; ¿otra fuente de wake?"
 	i=$((i + 1))
 done
-[ $n -gt 0 ] && awk -v s=$sum_pct -v n=$n 'BEGIN{printf "media: %.2f %%/h sobre %d ciclos\n", s/n, n}'
+if [ -n "$first_cap" ]; then
+	total=$((last_up - first_up))
+	awk -v a=$first_cap -v b=$last_cap -v t=$total 'BEGIN{
+		h=t/3600; if (h<=0) exit;
+		printf "TOTAL: %d%% -> %d%% en %.2f h = %.2f %%/h (resolución ±%.2f %%/h)\n", a, b, h, (a-b)/h, 1/h }'
+fi
 echo "CSV: $CSV"

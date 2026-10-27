@@ -52,3 +52,17 @@ unidad, el drop-in de logind y los hooks dentro de la imagen. Añadir `xx-lidd` 
   oneshot tras EmulationStation) lee `/storage/.config/xx-cfw/resume-pending` y relanza el
   último juego con `emulationstation --run-last`/`es-launch`; está marcado como TODO porque
   depende de la versión de EmulationStation-next que lleve la build.
+
+## Corrección tras el diagnóstico real (2026-10-27)
+
+- **Usar `suspend_cmd = systemctl suspend` en ROCKNIX.** Escribir `mem` directamente en
+  `/sys/power/state` se salta lo que hace systemd (congelar sesiones, hooks con su entorno), y
+  los números de ~3 %/h de ROCKNIX se midieron pasando por systemd. `systemctl suspend`
+  bloquea hasta que la consola despierta, así que el daemon sí sabe cuándo ha vuelto.
+  (El párrafo anterior que dice lo contrario era erróneo.)
+- logind ya trae `HandleLidSwitch=suspend` y `HandlePowerKey=suspend` en `/etc/systemd/logind.conf`.
+  Antes de instalar `xx-lidd` hay que comprobar dónde se puede poner el drop-in en la build
+  (en `/etc/systemd/logind.conf.d/` existe un README, pero no sabemos si es escribible).
+- RTC: en la RG34XX-SP hay dos. `rtc0` (pcf8563 externo) no tiene `wakealarm`; `rtc1`
+  (sun6i-rtc, el del SoC) sí, y es el que usa el stub (IRQ 136 del GIC). Sus relojes difieren
+  en unos 5 días; no importa porque las alarmas se calculan sobre el propio `since_epoch`.
