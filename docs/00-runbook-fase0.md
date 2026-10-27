@@ -93,3 +93,22 @@ transición sin esperar 90 minutos, pon `lid_wake_window = 3m` en la configuraci
   segunda pulsación necesaria…).
 
 Con eso relleno `docs/04-plan.md` con cifras reales y decido el primer parche de firmware.
+
+## Si no arranca (aprendido a base de golpes)
+
+- **La tarjeta del sistema va en la ranura INT (TF1).** En EXT (TF2) no arranca nada, con
+  ninguna imagen, y los síntomas son idénticos a una batería muerta o una imagen equivocada.
+- **LED naranja con el cargador puesto, incluso sin tarjeta**: es el LED de carga del AXP717,
+  gobernado por hardware. Significa que cable, cargador y batería están bien. Si parpadea,
+  es un fallo de carga.
+- **LED rojo**: lo enciende el software. Si se ve, el SoC ha arrancado; un rojo fijo con
+  pantalla negra apunta al panel, al DTB o a que el sistema cree que la tapa está cerrada.
+- **Tras una descarga profunda la consola puede quedarse colgada** y no responder a POWER
+  aunque el LED de carga esté encendido y la batería lleve horas cargando. **Pulsar el botón
+  RESET** (agujero en el lateral, con un clip) la saca de ese estado. Probar esto antes de
+  regrabar nada.
+- Para distinguir "imagen de DRAM equivocada" de "panel equivocado" en ROCKNIX: arrancar
+  3 minutos, apagar y mirar en el PC si la tarjeta tiene una partición nueva. Si la tiene,
+  Linux arrancó y el problema es el panel (variante V2); si no, es la DRAM (DDR3/DDR4).
+- Cargadores: usar cable USB-A a USB-C y un cargador de 5 V normal. Los cargadores de carga
+  rápida y los cables C-a-C fallan en parte de las unidades Anbernic.
